@@ -1,7 +1,13 @@
 import { TOKENS } from "../../lib/tokens";
 import { marketStatus, canTrade } from "../../lib/clock";
+import { rwaPrice } from "../../lib/binance";
 
 export const dynamic = "force-dynamic";
+
+function num(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
 
 async function yahooClose(ticker) {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=10d`;
@@ -11,24 +17,21 @@ async function yahooClose(ticker) {
   const result = json?.chart?.result?.[0];
   const stamps = result?.timestamp || [];
   const closes = result?.indicators?.quote?.[0]?.close || [];
-  let last = null;
   for (let i = stamps.length - 1; i >= 0; i -= 1) {
     if (closes[i] != null) {
-      last = { close: closes[i], ts: stamps[i] * 1000 };
-      break;
+      const asOf = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/New_York",
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        timeZoneName: "short",
+      }).format(new Date(stamps[i] * 1000));
+      return { closeUsd: closes[i], asOf };
     }
   }
-  if (!last) return null;
-  const asOf = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZoneName: "short",
-  }).format(new Date(last.ts));
-  return { closeUsd: last.close, asOf };
+  return null;
 }
 
 async function dexPrices(addresses) {
@@ -44,11 +47,7 @@ async function dexPrices(addresses) {
     const liq = Number(pair.liquidity?.usd || 0);
     const prev = out[addr];
     if (!prev || liq > prev.liquidityUsd) {
-      out[addr] = {
-        priceUsd: price,
-        liquidityUsd: liq,
-        volume24hUsd: Number(pair.volume?.h24 || 0),
-      };
+      out[addr] = { priceUsd: price, liquidityUsd: liq };
     }
   }
   return out;
@@ -65,48 +64,61 @@ export async function GET(req) {
   const close = await yahooClose(ticker);
   const addresses = listings.map((l) => l.address).filter(Boolean);
   const dex = await dexPrices(addresses);
+  const binance = await rwaPrice(addresses);
+  const byAddr = {};
+  const rows = binance.data?.data;
+  if (binance.ok && Array.isArray(rows)) {
+    for (const row of rows) {
+      const addr = String(row.tokenContractAddress || "").toLowerCase();
+      if (addr) byAddr[addr] = row;
+    }
+  }
 
   const quotes = listings.map((listing) => {
     const session = canTrade(listing.hours, clock.status);
+    const row = listing.address ? byAddr[listing.address.toLowerCase()] : null;
     const dexRow = listing.address ? dex[listing.address.toLowerCase()] : null;
-    const ratio = listing.ratio || 1;
-    const tokenPrice = dexRow?.priceUsd || 0;
+    const ratio = num(row?.tokenToShareRatio) || listing.ratio || 1;
+    const tokenPrice = num(row?.tokenPrice) || dexRow?.priceUsd || 0;
     const pricePerShare = tokenPrice > 0 ? tokenPrice / ratio : 0;
-    const premiumPct = close && pricePerShare ? ((pricePerShare - close.closeUsd) / close.closeUsd) * 100 : null;
-    const impact = dexRow && amount > 0 && dexRow.liquidityUsd > 0 ? (amount / dexRow.liquidityUsd) * 100 : null;
-    const thin = impact != null && impact > 8;
-    let tradeable = listing.verified && session.ok && pricePerShare > 0 && !thin;
+    const ref = num(row?.referencePrice) || close?.closeUsd || 0;
+    const premiumPct = ref && pricePerShare ? ((pricePerShare - ref) / ref) * 100 : null;
+    const status = String(row?.marketStatus || "").toLowerCase();
+    const open = ["premarket", "regular", "postmarket", "overnight"].includes(status);
+    let tradeable = listing.verified && pricePerShare > 0;
     let reason = listing.verified ? session.reason : listing.source;
-    if (listing.verified && !pricePerShare) reason = "No DexScreener price for this contract.";
-    if (thin) {
-      tradeable = false;
-      reason = "Pool too thin for this size.";
-    }
-    if (listing.hours !== "always" && !session.ok) tradeable = false;
+    if (row) {
+      tradeable = listing.verified && pricePerShare > 0 && (open || status === "");
+      if (status === "closed" || status === "pause") {
+        tradeable = false;
+        reason = row.reasonMsg || (status === "pause" ? "Trading is paused." : "Session is closed.");
+      } else if (status) reason = row.reasonMsg || status;
+    } else if (!pricePerShare) reason = listing.verified ? "No live price for this contract." : listing.source;
+    if (listing.hours !== "always" && !row && !session.ok) tradeable = false;
     return {
       ...listing,
       tokenPriceUsd: tokenPrice,
       pricePerShare,
+      ratio,
       premiumPct,
-      impact,
       liquidityUsd: dexRow?.liquidityUsd || 0,
       tradeable,
       reason,
-      dataSource: dexRow ? "DexScreener" : "none",
+      marketStatus: status || null,
+      dataSource: row ? "Binance Web3 RWA" : dexRow ? "DexScreener" : "none",
     };
   });
 
   const executable = quotes.filter((q) => q.tradeable).sort((a, b) => a.pricePerShare - b.pricePerShare);
-  const best = executable[0] || null;
-
   return Response.json({
     ticker,
     amount,
-    mode: "hybrid",
+    mode: binance.ok ? "live" : "hybrid",
+    binanceError: binance.ok ? null : { code: binance.errorCode, message: binance.errorMsg },
     clock,
     close,
     quotes,
-    best: best ? best.issuer : null,
+    best: executable[0]?.issuer || null,
     pricedAt: new Date().toISOString(),
   });
 }
