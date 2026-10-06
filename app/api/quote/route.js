@@ -1,6 +1,6 @@
-import { TOKENS } from "../../lib/tokens";
-import { marketStatus, canTrade } from "../../lib/clock";
-import { rwaPrice } from "../../lib/binance";
+import { TOKENS } from "../../../lib/tokens";
+import { marketStatus, canTrade } from "../../../lib/clock";
+import { rwaPrice } from "../../../lib/binance";
 
 export const dynamic = "force-dynamic";
 
@@ -46,9 +46,7 @@ async function dexPrices(addresses) {
     const price = Number(pair.priceUsd || 0);
     const liq = Number(pair.liquidity?.usd || 0);
     const prev = out[addr];
-    if (!prev || liq > prev.liquidityUsd) {
-      out[addr] = { priceUsd: price, liquidityUsd: liq };
-    }
+    if (!prev || liq > prev.liquidityUsd) out[addr] = { priceUsd: price, liquidityUsd: liq };
   }
   return out;
 }
@@ -59,7 +57,6 @@ export async function GET(req) {
   const amount = Number(searchParams.get("amount") || 20);
   const listings = TOKENS[ticker];
   if (!listings) return Response.json({ error: "Unsupported ticker" }, { status: 400 });
-
   const clock = marketStatus();
   const close = await yahooClose(ticker);
   const addresses = listings.map((l) => l.address).filter(Boolean);
@@ -73,7 +70,6 @@ export async function GET(req) {
       if (addr) byAddr[addr] = row;
     }
   }
-
   const quotes = listings.map((listing) => {
     const session = canTrade(listing.hours, clock.status);
     const row = listing.address ? byAddr[listing.address.toLowerCase()] : null;
@@ -95,30 +91,8 @@ export async function GET(req) {
       } else if (status) reason = row.reasonMsg || status;
     } else if (!pricePerShare) reason = listing.verified ? "No live price for this contract." : listing.source;
     if (listing.hours !== "always" && !row && !session.ok) tradeable = false;
-    return {
-      ...listing,
-      tokenPriceUsd: tokenPrice,
-      pricePerShare,
-      ratio,
-      premiumPct,
-      liquidityUsd: dexRow?.liquidityUsd || 0,
-      tradeable,
-      reason,
-      marketStatus: status || null,
-      dataSource: row ? "Binance Web3 RWA" : dexRow ? "DexScreener" : "none",
-    };
+    return { ...listing, tokenPriceUsd: tokenPrice, pricePerShare, ratio, premiumPct, liquidityUsd: dexRow?.liquidityUsd || 0, tradeable, reason, marketStatus: status || null, dataSource: row ? "Binance Web3 RWA" : dexRow ? "DexScreener" : "none" };
   });
-
   const executable = quotes.filter((q) => q.tradeable).sort((a, b) => a.pricePerShare - b.pricePerShare);
-  return Response.json({
-    ticker,
-    amount,
-    mode: binance.ok ? "live" : "hybrid",
-    binanceError: binance.ok ? null : { code: binance.errorCode, message: binance.errorMsg },
-    clock,
-    close,
-    quotes,
-    best: executable[0]?.issuer || null,
-    pricedAt: new Date().toISOString(),
-  });
+  return Response.json({ ticker, amount, mode: binance.ok ? "live" : "hybrid", binanceError: binance.ok ? null : { code: binance.errorCode, message: binance.errorMsg }, clock, close, quotes, best: executable[0]?.issuer || null, pricedAt: new Date().toISOString() });
 }
