@@ -1,6 +1,6 @@
-import { TOKENS } from "../../../lib/tokens";
+import { STOCKS, listingsFor } from "../../../lib/tokens";
 import { marketStatus, canTrade } from "../../../lib/clock";
-import { rwaPrice } from "../../../lib/binance";
+import { rwaPrice, rwaTokens } from "../../../lib/binance";
 
 export const dynamic = "force-dynamic";
 
@@ -19,49 +19,23 @@ async function yahooClose(ticker) {
   const closes = result?.indicators?.quote?.[0]?.close || [];
   for (let i = stamps.length - 1; i >= 0; i -= 1) {
     if (closes[i] != null) {
-      const asOf = new Intl.DateTimeFormat("en-US", {
-        timeZone: "America/New_York",
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-        timeZoneName: "short",
-      }).format(new Date(stamps[i] * 1000));
+      const asOf = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }).format(new Date(stamps[i] * 1000));
       return { closeUsd: closes[i], asOf };
     }
   }
   return null;
 }
 
-async function dexPrices(addresses) {
-  if (!addresses.length) return {};
-  const url = `https://api.dexscreener.com/latest/dex/tokens/${addresses.join(",")}`;
-  const res = await fetch(url, { next: { revalidate: 30 } });
-  if (!res.ok) return {};
-  const json = await res.json();
-  const out = {};
-  for (const pair of json.pairs || []) {
-    const addr = (pair.baseToken?.address || "").toLowerCase();
-    const price = Number(pair.priceUsd || 0);
-    const liq = Number(pair.liquidity?.usd || 0);
-    const prev = out[addr];
-    if (!prev || liq > prev.liquidityUsd) out[addr] = { priceUsd: price, liquidityUsd: liq };
-  }
-  return out;
-}
-
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
   const ticker = (searchParams.get("ticker") || "NVDA").toUpperCase();
   const amount = Number(searchParams.get("amount") || 20);
-  const listings = TOKENS[ticker];
-  if (!listings) return Response.json({ error: "Unsupported ticker" }, { status: 400 });
+  const listings = listingsFor(ticker);
+  if (!listings.length) return Response.json({ error: "Unsupported ticker", stocks: STOCKS.map((s) => s.ticker) }, { status: 400 });
   const clock = marketStatus();
   const close = await yahooClose(ticker);
   const addresses = listings.map((l) => l.address).filter(Boolean);
-  const dex = await dexPrices(addresses);
-  const binance = await rwaPrice(addresses);
+  const [binance, catalog] = await Promise.all([rwaPrice(addresses), rwaTokens()]);
   const byAddr = {};
   const rows = binance.data?.data;
   if (binance.ok && Array.isArray(rows)) {
@@ -73,26 +47,24 @@ export async function GET(req) {
   const quotes = listings.map((listing) => {
     const session = canTrade(listing.hours, clock.status);
     const row = listing.address ? byAddr[listing.address.toLowerCase()] : null;
-    const dexRow = listing.address ? dex[listing.address.toLowerCase()] : null;
-    const ratio = num(row?.tokenToShareRatio) || listing.ratio || 1;
-    const tokenPrice = num(row?.tokenPrice) || dexRow?.priceUsd || 0;
+    const ratio = num(row?.tokenToShareRatio) || 1;
+    const tokenPrice = num(row?.tokenPrice);
     const pricePerShare = tokenPrice > 0 ? tokenPrice / ratio : 0;
     const ref = num(row?.referencePrice) || close?.closeUsd || 0;
     const premiumPct = ref && pricePerShare ? ((pricePerShare - ref) / ref) * 100 : null;
     const status = String(row?.marketStatus || "").toLowerCase();
     const open = ["premarket", "regular", "postmarket", "overnight"].includes(status);
-    let tradeable = listing.verified && pricePerShare > 0;
-    let reason = listing.verified ? session.reason : listing.source;
-    if (row) {
-      tradeable = listing.verified && pricePerShare > 0 && (open || status === "");
-      if (status === "closed" || status === "pause") {
-        tradeable = false;
-        reason = row.reasonMsg || (status === "pause" ? "Trading is paused." : "Session is closed.");
-      } else if (status) reason = row.reasonMsg || status;
-    } else if (!pricePerShare) reason = listing.verified ? "No live price for this contract." : listing.source;
-    if (listing.hours !== "always" && !row && !session.ok) tradeable = false;
-    return { ...listing, tokenPriceUsd: tokenPrice, pricePerShare, ratio, premiumPct, liquidityUsd: dexRow?.liquidityUsd || 0, tradeable, reason, marketStatus: status || null, dataSource: row ? "Binance Web3 RWA" : dexRow ? "DexScreener" : "none" };
+    let tradeable = listing.verified && pricePerShare > 0 && (status ? open : session.ok);
+    let reason = row?.reasonMsg || (listing.verified ? session.reason : listing.source);
+    if (status === "closed" || status === "pause") {
+      tradeable = false;
+      reason = row?.reasonMsg || (status === "pause" ? "Trading is paused." : "Session is closed.");
+    }
+    if (!listing.verified) tradeable = false;
+    if (!pricePerShare && listing.verified) reason = reason || "No live Binance price for this contract.";
+    return { ...listing, tokenPriceUsd: tokenPrice, pricePerShare, ratio, premiumPct, tradeable, reason, marketStatus: status || null, dataSource: row ? "Binance Web3 RWA" : "none" };
   });
   const executable = quotes.filter((q) => q.tradeable).sort((a, b) => a.pricePerShare - b.pricePerShare);
-  return Response.json({ ticker, amount, mode: binance.ok ? "live" : "hybrid", binanceError: binance.ok ? null : { code: binance.errorCode, message: binance.errorMsg }, clock, close, quotes, best: executable[0]?.issuer || null, pricedAt: new Date().toISOString() });
+  const catalogCount = Array.isArray(catalog.data?.data) ? catalog.data.data.length : 0;
+  return Response.json({ ticker, amount, mode: binance.ok ? "live" : "hybrid", binanceError: binance.ok ? null : { code: binance.errorCode, message: binance.errorMsg }, catalogCount, stocks: STOCKS.map((s) => ({ ticker: s.ticker, name: s.name })), clock, close, quotes, best: executable[0]?.issuer || null, pricedAt: new Date().toISOString() });
 }
