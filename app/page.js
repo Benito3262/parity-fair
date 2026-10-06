@@ -18,6 +18,7 @@ export default function Page() {
   const [loading, setLoading] = useState(false);
   const [sheet, setSheet] = useState(false);
   const stocks = data?.stocks?.map((s) => s.ticker) || FALLBACK;
+  const action = side === "buy" ? "Buy" : "Sell";
 
   function useProvider(next, account) {
     setProvider(next);
@@ -27,7 +28,7 @@ export default function Page() {
 
   async function connectInjected() {
     const eth = window.ethereum;
-    if (!eth) { setError("No browser wallet. Use WalletConnect."); return; }
+    if (!eth) { setError("No browser wallet on this page. Use WalletConnect."); return; }
     await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x38" }] }).catch(() => null);
     const accounts = await eth.request({ method: "eth_requestAccounts" });
     useProvider(eth, accounts[0]);
@@ -41,12 +42,7 @@ export default function Page() {
       optionalChains: [56],
       showQrModal: true,
       rpcMap: { 56: "https://bsc-dataseed.binance.org" },
-      metadata: {
-        name: "Parity",
-        description: "Fair price for tokenized stocks",
-        url: "https://parity-fair.vercel.app",
-        icons: ["https://parity-fair.vercel.app/favicon.ico"],
-      },
+      metadata: { name: "Parity", description: "Fair price for tokenized stocks", url: "https://parity-fair.vercel.app", icons: ["https://parity-fair.vercel.app/favicon.ico"] },
     });
     await wc.connect();
     useProvider(wc, wc.accounts?.[0]);
@@ -61,21 +57,29 @@ export default function Page() {
     setData(json);
   }
 
-  async function prepare(route) {
+  async function buy(route) {
     if (!wallet) { setSheet(true); return; }
     setLoading(true); setError(""); setHash("");
     const res = await fetch("/api/trade", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ side, address: route.address, amount, wallet }) });
     const json = await res.json();
     setLoading(false);
     setTrade({ ...json, symbol: route.symbol });
-    if (!json.ok) setError(json.error || "Trade route failed");
+    if (!json.ok) setError(json.error || "Buy failed");
   }
 
   async function sign() {
-    if (!trade?.tx || !provider) return;
-    if (trade.expiresAt && Date.now() > trade.expiresAt) { setError("Quote expired (30 seconds). Run it again."); return; }
-    const tx = await provider.request({ method: "eth_sendTransaction", params: [{ from: wallet, to: trade.tx.to, data: trade.tx.data, value: trade.tx.value || "0x0" }] });
-    setHash(tx);
+    if (!provider) return;
+    if (trade?.expiresAt && Date.now() > trade.expiresAt) { setError("Quote expired (30 seconds). Tap Buy again."); return; }
+    if (trade?.tx) {
+      const tx = await provider.request({ method: "eth_sendTransaction", params: [{ from: wallet, to: trade.tx.to, data: trade.tx.data, value: trade.tx.value || "0x0" }] });
+      setHash(tx);
+      return;
+    }
+    if (trade?.typedData) {
+      const signed = await provider.request({ method: "eth_signTypedData_v4", params: [wallet, JSON.stringify(trade.typedData)] });
+      setHash(signed);
+      setError("Order signed. Submit is the next step.");
+    }
   }
 
   const best = data?.quotes?.find((q) => q.issuer === data.best);
@@ -106,15 +110,15 @@ export default function Page() {
           <div className="row"><span>Vs last close</span><span>{q.premiumPct == null ? "—" : `${q.premiumPct > 0 ? "+" : ""}${q.premiumPct.toFixed(2)}%`}</span></div>
           <p className="muted">{q.reason}{best && q.tradeable && q.issuer !== best.issuer ? ` About $${((q.pricePerShare - best.pricePerShare) * (amount / q.pricePerShare)).toFixed(2)} more than the best route.` : ""}</p>
           {q.issuer === data.best && <p className="good">Best route.</p>}
-          {q.tradeable && <button className="chip" onClick={() => prepare(q)}>{side === "buy" ? "Buy this" : "Sell this"}</button>}
+          {q.tradeable && <button className="primary" onClick={() => buy(q)}>{action}</button>}
         </article>
       ))}
-      {trade && <article className="card"><strong>{trade.symbol} {side}</strong><p>{trade.simOk ? "Simulation passed. Sign in your wallet." : trade.simError || trade.error || "Review the route before signing."}</p>{trade.tx && <button className="primary" onClick={sign}>Sign {side}</button>}{hash && <p><a href={`https://bscscan.com/tx/${hash}`}>View on BscScan</a></p>}</article>}
+      {trade?.ok && <article className="card"><strong>{action} {trade.symbol}</strong><p>{trade.simOk ? "Route tested. Sign to send the real trade." : trade.simError || "Route ready. Sign in your wallet."}</p><button className="primary" onClick={sign}>Sign {action}</button>{hash && <p><a href={hash.startsWith("0x") && hash.length === 66 ? `https://bscscan.com/tx/${hash}` : "#"}>{hash.slice(0, 18)}...</a></p>}</article>}
       {sheet && (
         <div className="sheet" onClick={() => setSheet(false)}>
           <article onClick={(e) => e.stopPropagation()}>
             <strong>Connect a wallet</strong>
-            <p className="muted">Works on desktop and mobile. WalletConnect opens a QR code or your installed wallet.</p>
+            <p className="muted">WalletConnect works on desktop and mobile. Browser wallet works inside Bitget, Binance, or MetaMask.</p>
             <button className="primary" onClick={connectWalletConnect}>WalletConnect</button>
             <button className="chip" onClick={connectInjected}>Browser wallet</button>
           </article>
