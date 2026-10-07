@@ -19,6 +19,7 @@ export default function Page() {
   const [sheet, setSheet] = useState(false);
   const stocks = data?.stocks?.map((s) => s.ticker) || FALLBACK;
   const action = side === "buy" ? "Buy" : "Sell";
+  const best = data?.quotes?.find((q) => q.issuer === data.best);
 
   function useProvider(next, account) {
     setProvider(next);
@@ -82,41 +83,52 @@ export default function Page() {
     }
   }
 
-  const best = data?.quotes?.find((q) => q.issuer === data.best);
-
   return (
-    <main>
+    <>
       <header>
-        <div className="brand"><img src="/logo.jpg" alt="Parity" /></div>
+        <a className="brand" href="/"><img src="/logo.jpg" alt="Parity" /></a>
         <button className="connect" onClick={() => setSheet(true)}>{wallet ? wallet.slice(0, 6) + "..." + wallet.slice(-4) : "Connect"}</button>
       </header>
-      <div className="kicker">Tokenized stocks on BNB Chain</div>
-      <h1>Buy the fair price.</h1>
-      <p className="lede">Same stock, three tokens. Compare the price per real share, then buy or sell the cheapest route.</p>
-      <label>Amount in USD</label>
-      <input value={amount} inputMode="decimal" onChange={(e) => setAmount(Number(e.target.value || 0))} />
-      <label>Stock</label>
-      <div className="chips">{stocks.map((t) => <button key={t} className={t === ticker ? "chip on" : "chip"} onClick={() => setTicker(t)}>{t}</button>)}</div>
-      <label>Side</label>
-      <div className="chips"><button className={side === "buy" ? "seg on" : "seg"} onClick={() => setSide("buy")}>Buy</button><button className={side === "sell" ? "seg on" : "seg"} onClick={() => setSide("sell")}>Sell</button></div>
-      <button className="primary" onClick={compare}>{loading ? "Checking..." : `Compare $${amount || 0} of ${ticker}`}</button>
-      {error && <p className="bad">{error}</p>}
-      {data && <p className="muted">US market: {data.clock.reason} Last close {data.close ? `$${data.close.closeUsd.toFixed(2)} (${data.close.asOf})` : "unavailable"}. Data: {data.mode}.</p>}
-      {data?.quotes?.map((q) => (
-        <article key={q.issuer} className={q.issuer === data.best ? "card best" : "card"}>
-          <strong>{q.name} · {q.symbol}</strong>
-          <div className="row"><span>Can trade?</span><span className={q.tradeable ? "good" : "bad"}>{q.tradeable ? "Yes" : "No"}</span></div>
-          <div className="row"><span>Price / share</span><span>{q.pricePerShare ? `$${q.pricePerShare.toFixed(2)}` : "—"}</span></div>
-          <div className="row"><span>Vs last close</span><span>{q.premiumPct == null ? "—" : `${q.premiumPct > 0 ? "+" : ""}${q.premiumPct.toFixed(2)}%`}</span></div>
-          <p className="muted">{q.reason}{best && q.tradeable && q.issuer !== best.issuer ? ` About $${((q.pricePerShare - best.pricePerShare) * (amount / q.pricePerShare)).toFixed(2)} more than the best route.` : ""}</p>
-          {q.issuer === data.best && <p className="good">Best route.</p>}
-          {q.tradeable && <button className="primary" onClick={() => buy(q)}>{action}</button>}
-        </article>
-      ))}
-      {trade?.ok && <article className="card"><strong>{action} {trade.symbol}</strong><p>{trade.simOk ? "Route tested. Sign to send the real trade." : trade.simError || "Route ready. Sign in your wallet."}</p><button className="primary" onClick={sign}>Sign {action}</button>{hash && <p><a href={hash.startsWith("0x") && hash.length === 66 ? `https://bscscan.com/tx/${hash}` : "#"}>{hash.slice(0, 18)}...</a></p>}</article>}
+      <main>
+        <section className="hero">
+          <div>
+            <p className="kicker">Tokenized stocks on BNB Chain</p>
+            <h1>Buy the fair price.</h1>
+            <p className="lede">Same stock, three tokens. Parity checks bStocks, Ondo, and xStocks, converts each quote to the price of one real share, and buys the cheapest route that can trade.</p>
+          </div>
+          <img className="mascot" src="/mascot.jpg" alt="Parity mascot" />
+        </section>
+        <section className="panel">
+          <label>Amount in USD</label>
+          <input value={amount} inputMode="decimal" onChange={(e) => setAmount(Number(e.target.value || 0))} />
+          <label>Stock</label>
+          <div className="chips">{stocks.map((t) => <button key={t} className={t === ticker ? "chip on" : "chip"} onClick={() => setTicker(t)}>{t}</button>)}</div>
+          <label>Side</label>
+          <div className="chips"><button className={side === "buy" ? "seg on" : "seg"} onClick={() => setSide("buy")}>Buy</button><button className={side === "sell" ? "seg on" : "seg"} onClick={() => setSide("sell")}>Sell</button></div>
+          <button className="primary" onClick={compare}>{loading ? "Checking..." : `Compare $${amount || 0} of ${ticker}`}</button>
+          {error && <p className="bad">{error}</p>}
+          {data && <p className="muted">US market: {data.clock.reason} Last close {data.close ? `$${data.close.closeUsd.toFixed(2)} (${data.close.asOf})` : "unavailable"}. Data: {data.mode}.</p>}
+        </section>
+        <section className="grid">
+          {data?.quotes?.map((q) => (
+            <article key={q.issuer} className={q.issuer === data.best ? "card best" : "card"}>
+              <strong>{q.name} · {q.symbol}</strong>
+              <div className="row"><span>Can trade?</span><span className={q.tradeable ? "good" : "bad"}>{q.tradeable ? "Yes" : "No"}</span></div>
+              <div className="row"><span>Price / share</span><span>{q.pricePerShare ? `$${q.pricePerShare.toFixed(2)}` : "—"}</span></div>
+              <div className="row"><span>Vs last close</span><span>{q.premiumPct == null ? "—" : `${q.premiumPct > 0 ? "+" : ""}${q.premiumPct.toFixed(2)}%`}</span></div>
+              <p className="muted">{q.reason}{best && q.tradeable && q.issuer !== best.issuer ? ` About $${((q.pricePerShare - best.pricePerShare) * (amount / q.pricePerShare)).toFixed(2)} more than the best route.` : ""}</p>
+              {q.issuer === data.best && <p className="good">Best route.</p>}
+              {q.tradeable && <button className="primary" onClick={() => buy(q)}>{action}</button>}
+            </article>
+          ))}
+        </section>
+        {trade?.ok && <article className="card sign"><strong>{action} {trade.symbol}</strong><p>{trade.simOk ? "Route tested. Sign to send the real trade." : trade.simError || "Route ready. Sign in your wallet."}</p><button className="primary" onClick={sign}>Sign {action}</button>{hash && <p><a href={hash.startsWith("0x") && hash.length === 66 ? `https://bscscan.com/tx/${hash}` : "#"}>{hash.slice(0, 18)}...</a></p>}</article>}
+        <footer>BNB Hack: Tokenized Stocks Edition. Spot only on BSC. <a href="https://github.com/Benito3262/parity-fair">GitHub</a></footer>
+      </main>
       {sheet && (
         <div className="sheet" onClick={() => setSheet(false)}>
           <article onClick={(e) => e.stopPropagation()}>
+            <img className="sheet-mascot" src="/mascot.jpg" alt="" />
             <strong>Connect a wallet</strong>
             <p className="muted">WalletConnect works on desktop and mobile. Browser wallet works inside Bitget, Binance, or MetaMask.</p>
             <button className="primary" onClick={connectWalletConnect}>WalletConnect</button>
@@ -124,7 +136,6 @@ export default function Page() {
           </article>
         </div>
       )}
-      <footer>BNB Hack: Tokenized Stocks Edition. Spot only on BSC. <a href="https://github.com/Benito3262/parity-fair">GitHub</a></footer>
-    </main>
+    </>
   );
 }
