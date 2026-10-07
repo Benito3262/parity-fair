@@ -1,98 +1,43 @@
-# Parity Developer Experience notes
+# Parity developer experience log
 
-For BNB Hack: Tokenized Stocks Edition. The report is mandatory and worth 25% of the score. Vague or generated-sounding text is rejected. Official form: https://forms.gle/EUQ39xf54GHjC2ys5
+Project: Parity, fair price for tokenized stocks on BSC. Repo https://github.com/Benito3262/parity-fair. Live site https://parity-fair.vercel.app. Dates below are 2026.
 
-Source: https://www.bnbchain.org/en/hackathons/tokenized-stocks?tab=tracks
+## 6 Oct, first price call
 
-This file is the working Developer Experience record. Folder: dx-log. File: dx-log.md. New errors get appended here.
+Opened https://web3.binance.com/en/dev-docs/authentication, the RWA price page, and the trading introduction. The first call that returned data was `GET /build/api/v1/dex/market/rwa/price` with `binanceChainId=56` and `tokenContractAddresses` for NVDAB `0x02fca66c1d1afb4e2a7884261eb00f63598a7436` and NVDAon `0xa9ee28c80f960b889dfbd1902055218cba016f75`. The function was in Frankfurt. Both rows had `tokenPrice`. NVDAB was about $241.47 a share, NVDAon about $241.88. Yahoo close that morning was $241.41. The site labeled those two `Binance Web3 RWA`.
 
-## What the hackathon asks
+I did not time the gap from first opening the docs to that call, so I am not putting a number on it.
 
-1. Onboarding: time from docs to first successful call, and where it stuck.
-2. Documentation issues: page, and where on the page.
-3. API pitfalls: exact error, edge case, latency.
-4. AI stack: Wallet Skills, Agentic Wallet, CLI. What worked, what did not, what is missing.
-5. Tokenized-stock specifics: liquidity, slippage, hours, on-chain vs reference, bStocks vs Ondo vs xStocks.
-6. Redesign: how to make a first call work on landing.
-7. Requested capabilities.
+## Signing
 
-Also required with the project: public repo, deployed link or judge instructions, demo video of 4 minutes or less. Submissions lock 11 Oct 2026, 12:00 UTC. Repo and link must stay up through judging.
+The old client signed the public path and sent epoch milliseconds as hex. The authentication page says the signed string is timestamp, method, then `/build` plus the path and query, and the signature is Base64. It calls a missing `/build` the main cause of `40102`. We never got a live `40102` back. The calls failed quietly and the app fell back to Yahoo and PancakeSwap. The new client uses ISO 8601, Base64, and the `/build` prefix. Price calls then worked.
 
-## Onboarding
+## 40304
 
-- Docs opened: https://web3.binance.com/en/dev-docs and the authentication, RWA, trading, and transaction pages.
-- First successful call: 2026-10-06, signed `GET /api/v1/dex/market/rwa/price` for NVDAB and NVDAon on chain 56, from the Frankfurt deploy. Response had `tokenPrice`. Site labeled `Binance Web3 RWA`.
-- Time to that call was not measured from first doc open. Do not invent a duration.
-- Stuck before that on signing, region, and deploy, below.
+A signed TSLAon probe returned `40304`, a region block, not a bad signature. `vercel.json` with region `fra1` was not built on the old project. The new project deploys in Frankfurt and the price call succeeded there. A US host still gets `40304`.
 
-## Documentation issues
+## Docs that fought each other
 
-- Authentication page says the signed string includes `/build` plus path and query. Missing `/build` is called the top cause of `40102`. The old client signed the public path only.
-- Trading introduction says `/quote-and-swap` needs no `quoteId`, then the same page says `vendor` is required and only `LiquidMesh` is accepted. Equity tokens are a different flow: `/quote`, then `/swap` with `quoteId`, then EIP-712 and `/order/submit` for RFQ. That split is easy to miss.
-- RWA price docs use `binanceChainId` and `tokenContractAddresses`. The old client used `/bapi/defi/...` and `symbol=`.
-- Timestamp docs want ISO 8601. The old client sent epoch milliseconds and a hex signature.
+On https://web3.binance.com/en/dev-docs/products/trading-api/introduction the flash section says `/quote-and-swap` needs no `quoteId`. Lower on the same page, `vendor` is required and the only accepted value is `LiquidMesh`. Equity tokens are a different path: `/quote`, then `/swap` with that `quoteId` within 30 seconds, then EIP-712 and `/order/submit` for RFQ. I used the first sentence and hit the second rule.
 
-## API pitfalls
+## Buy errors
 
-### Signing and path, 2026-10-06
+6 Oct, Bitget Wallet, button on NVDAB. The page showed `Parameter [quoteId] is required`. `/swap` had been called with no `quoteId`. Deploy `dpl_BC2qdzVmjNE99ZegtboxS18dCppP` switched that route to `/quote-and-swap`.
 
-- Message: silent failure, fallback to Yahoo or PancakeSwap. `40102` expected if `/build` is missing. Not confirmed on a live response.
-- Attempt: rewrite to `/build/api/v1/dex/market/rwa/*`, ISO timestamp, Base64 HMAC, headers `X-OC-APIKEY`, `X-OC-TIMESTAMP`, `X-OC-SIGN`.
-- Result: rewrite truncated in old repo. New `parity-fair` client succeeded on price.
+The next live `POST /api/trade` returned `{"ok":false,"error":"Parameter [vendor] is required","code":40001}`. Deploy `dpl_D4JHQhgLU5vxEHh1FU5A1oLe5fCT` quotes first, passes `quoteId` into `/swap`, and only uses `vendor=LiquidMesh` if no id comes back. That path has not been retested from a wallet. A signed buy is not confirmed.
 
-### `40304`, 2026-10-06
+## Session field
 
-- Message: compliance restriction, not `40102`.
-- Attempt: signed TSLAon probe. Then `vercel.json` region `fra1`.
-- Result: Frankfurt price calls returned live prices. A US host still gets `40304`.
+The successful price response had empty `marketStatus` and `reasonMsg`. "Can trade?" still uses a New York clock when those fields are blank.
 
-### `Parameter [quoteId] is required`, 2026-10-06
+## What we did not use
 
-- Seen in Bitget Wallet on Buy.
-- Cause: `/swap` called without `quoteId`.
-- Attempt: switch to `/quote-and-swap`. Deploy `dpl_BC2qdzVmjNE99ZegtboxS18dCppP`.
-- Result: `quoteId` error gone. Next error appeared.
+Wallet Skills, Agentic Wallet, and the Binance CLI were not used. WalletConnect is on the page with a public example project id, so the QR may be rejected until there is a project id from dashboard.reown.com.
 
-### `40001` `Parameter [vendor] is required`, 2026-10-06
+## Same stock, three tokens
 
-- Live `POST /api/trade` returned that body.
-- Docs: `quote-and-swap` requires `vendor=LiquidMesh`. Ondo and bStock need quote then swap.
-- Attempt: quote, find `quoteId`, swap with it. Fallback `vendor=LiquidMesh`. Deploy `dpl_D4JHQhgLU5vxEHh1FU5A1oLe5fCT`.
-- Result: not retested. Buy is not confirmed.
+NVDAx has no verified BSC address, so that card stays unsupported. `tokenToShareRatio` was 1 on the two NVDA prices we got. The token catalog call returned 488 rows. Only contracts we could verify are shown. Liquidity, slippage, and a weekend premium have not been measured.
 
-### Empty `marketStatus`, 2026-10-06
+## What would have saved the first day
 
-- Price call succeeded but `marketStatus` and `reasonMsg` were empty.
-- Result: "Can trade?" still uses the local New York clock when Binance sends no session.
-
-## AI stack
-
-- Wallet Skills, Agentic Wallet, and the Binance CLI were not used.
-- WalletConnect was added in the page. It uses a public example project id. A project-owned Reown id is still missing, so the QR may fail.
-- Nothing here can honestly claim the $2,000 Agentic Wallet prize yet.
-
-## Tokenized-stock specifics
-
-- Same stock, different tokens. NVDA checked on 2026-10-06: NVDAB about $241.47 per share, NVDAon about $241.88, Yahoo last close $241.41. Both marked tradeable in the regular session. NVDAx has no verified BSC address, so it stays unsupported.
-- `tokenToShareRatio` was 1 on those two. Price per share is token price divided by that ratio.
-- Catalog call returned 488 rows. Only verified BSC contracts are shown.
-- Liquidity, slippage, and weekend premium are not measured yet. Do not write numbers for them.
-
-## Redesign suggestions
-
-- One page that shows a signed price call for chain 56, with the `/build` prefix in the example.
-- State that equity tokens cannot use `quote-and-swap` unless `vendor=LiquidMesh`, and show the RFQ steps next to the pool steps.
-- Return `marketStatus` on every RWA price row, including closed and pause.
-
-## Requested capabilities
-
-- Verified BSC addresses for xStocks in the RWA token list.
-- A quote response that always includes `quoteId` at a stable path.
-- Session status on the price endpoint when the market is closed.
-
-## Project status for judges
-
-- Repo: https://github.com/Benito3262/parity-fair
-- Link: https://parity-fair.vercel.app
-- Live: RWA price, Yahoo close, nine verified bStock names, NVDA Ondo, wallet connect UI.
-- Not confirmed: signed buy, sell, RFQ submit, xStocks.
+Put a signed chain-56 price example, including `/build`, on the authentication page. On the trading page, say in the first paragraph that Ondo and bStock do not use `quote-and-swap` unless the vendor is `LiquidMesh`, and show the RFQ steps beside the pool steps. Return `marketStatus` on every RWA price row.
