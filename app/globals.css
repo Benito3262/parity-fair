@@ -36,5 +36,15 @@ a { color: var(--yellow); }
   .grid { grid-template-columns: 1fr 1fr; }
 }
 
-.peeker { position: fixed; right: -46px; top: 42vh; width: 132px; z-index: 4; pointer-events: none; animation: peek 2.8s ease-in-out infinite; }
-@keyframes peek { 50
+html, body { max-width: 100%; overflow-x: hidden; }
+img { max-width: 100%; height: auto; }
+header, main { width: min(640px, calc(100% - 28px)); margin-left: auto; margin-right: auto; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 14px; }
+.brand { display: flex; min-width: 0; }
+.brand img, .brand img.logo { width: 92px; height: auto; border-radius: 10px; display: block; }
+.hero { display: block; margin-top: 18px; }
+.panel, .card { width: 100%; }
+@media (max-width: 720px) {
+  .brand img, .brand img.logo { width: 76px; }
+  header, main { width: min(640px, calc(100% - 20px)); }
+}
