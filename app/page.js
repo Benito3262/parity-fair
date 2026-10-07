@@ -42,7 +42,7 @@ export default function Page() {
       optionalChains: [56],
       showQrModal: true,
       rpcMap: { 56: "https://bsc-dataseed.binance.org" },
-      metadata: { name: "Parity", description: "Fair price for tokenized stocks", url: "https://parity-fair.vercel.app", icons: ["https://parity-fair.vercel.app/logo.svg"] },
+      metadata: { name: "Parity", description: "Fair price for tokenized stocks", url: "https://parity-fair.vercel.app", icons: ["https://parity-fair.vercel.app/logo.jpg"] },
     });
     await wc.connect();
     useProvider(wc, wc.accounts?.[0]);
@@ -87,7 +87,7 @@ export default function Page() {
   return (
     <main>
       <header>
-        <div className="brand"><img src="/logo.svg" alt="Parity" /></div>
+        <div className="brand"><img src="/logo.jpg" alt="Parity" /></div>
         <button className="connect" onClick={() => setSheet(true)}>{wallet ? wallet.slice(0, 6) + "..." + wallet.slice(-4) : "Connect"}</button>
       </header>
       <div className="kicker">Tokenized stocks on BNB Chain</div>
