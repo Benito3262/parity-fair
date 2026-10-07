@@ -96,7 +96,6 @@ export default function Page() {
             <h1>Buy the fair price.</h1>
             <p className="lede">Same stock, three tokens. Parity checks bStocks, Ondo, and xStocks, converts each quote to the price of one real share, and buys the cheapest route that can trade.</p>
           </div>
-          <img className="mascot" src="/mascot.jpg" alt="Parity mascot" />
         </section>
         <section className="panel">
           <label>Amount in USD</label>
@@ -128,7 +127,6 @@ export default function Page() {
       {sheet && (
         <div className="sheet" onClick={() => setSheet(false)}>
           <article onClick={(e) => e.stopPropagation()}>
-            <img className="sheet-mascot" src="/mascot.jpg" alt="" />
             <strong>Connect a wallet</strong>
             <p className="muted">WalletConnect works on desktop and mobile. Browser wallet works inside Bitget, Binance, or MetaMask.</p>
             <button className="primary" onClick={connectWalletConnect}>WalletConnect</button>
@@ -136,6 +134,7 @@ export default function Page() {
           </article>
         </div>
       )}
+      <img className="peeker" src="/mascot.png" alt="Parity mascot peeking from the side" />
     </>
   );
 }
