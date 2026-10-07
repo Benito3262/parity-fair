@@ -87,17 +87,35 @@ export default function Page() {
     <>
       <header>
         <a className="brand" href="/"><img className="logo" src="/logo.jpg" alt="Parity" /></a>
+        <nav>
+          <a href="#how">How it works</a>
+          <a href="#try">Try it</a>
+        </nav>
         <button className="connect" onClick={() => setSheet(true)}>{wallet ? wallet.slice(0, 6) + "..." + wallet.slice(-4) : "Connect"}</button>
       </header>
       <main>
-        <section className="hero">
-          <div>
-            <p className="kicker">Tokenized stocks on BNB Chain</p>
-            <h1>Buy the fair price.</h1>
-            <p className="lede">Same stock, three tokens. Parity checks bStocks, Ondo, and xStocks, converts each quote to the price of one real share, and buys the cheapest route that can trade.</p>
-          </div>
+        <p className="badge">Live on BNB Chain · BNB Hack: Tokenized Stocks</p>
+        <h1>The same stock. Three prices. One fair buy.</h1>
+        <p className="lede">bStocks, Ondo, and xStocks can all be Nvidia. One may be closed, one may be expensive. Type a dollar amount and Parity buys the cheapest share it can trade.</p>
+        <div className="cta"><a className="primary link" href="#try">Compare a stock</a></div>
+        <article className="story">
+          <p className="kicker">Saturday demo · $10 of NVDA</p>
+          <div className="row"><span>bStocks</span><span className="bad">Closed</span></div>
+          <div className="row"><span>Ondo</span><span>1.5% over Friday close</span></div>
+          <div className="row"><span>Best route</span><span className="good">Bought</span></div>
+          <p className="muted">One version will not trade. One charges a weekend premium. Parity skips both and takes the cheapest open route.</p>
+        </article>
+        <section id="how">
+          <p className="kicker">How it works</p>
+          <h2>Three checks. Then the buy.</h2>
+          <ol>
+            <li><strong>Can it trade?</strong><span>Each version has its own hours. A closed token is not a cheap token.</span></li>
+            <li><strong>Price per real share.</strong><span>Tokens per share differ. Parity divides the token price by that ratio.</span></li>
+            <li><strong>Test, then buy.</strong><span>The route is simulated, then sent from your wallet on BSC.</span></li>
+          </ol>
         </section>
-        <section className="panel">
+        <section className="panel" id="try">
+          <p className="kicker">Try it</p>
           <label>Amount in USD</label>
           <input value={amount} inputMode="decimal" onChange={(e) => setAmount(Number(e.target.value || 0))} />
           <label>Stock</label>
@@ -108,20 +126,20 @@ export default function Page() {
           {error && <p className="bad">{error}</p>}
           {data && <p className="muted">US market: {data.clock.reason} Last close {data.close ? `$${data.close.closeUsd.toFixed(2)} (${data.close.asOf})` : "unavailable"}. Data: {data.mode}.</p>}
         </section>
-        <section className="grid">
+        <div className="grid">
           {data?.quotes?.map((q) => (
             <article key={q.issuer} className={q.issuer === data.best ? "card best" : "card"}>
               <strong>{q.name} · {q.symbol}</strong>
               <div className="row"><span>Can trade?</span><span className={q.tradeable ? "good" : "bad"}>{q.tradeable ? "Yes" : "No"}</span></div>
               <div className="row"><span>Price / share</span><span>{q.pricePerShare ? `$${q.pricePerShare.toFixed(2)}` : "—"}</span></div>
               <div className="row"><span>Vs last close</span><span>{q.premiumPct == null ? "—" : `${q.premiumPct > 0 ? "+" : ""}${q.premiumPct.toFixed(2)}%`}</span></div>
-              <p className="muted">{q.reason}{best && q.tradeable && q.issuer !== best.issuer ? ` About $${((q.pricePerShare - best.pricePerShare) * (amount / q.pricePerShare)).toFixed(2)} more than the best route.` : ""}</p>
+              <p className="muted">{q.reason}</p>
               {q.issuer === data.best && <p className="good">Best route.</p>}
               {q.tradeable && <button className="primary" onClick={() => buy(q)}>{action}</button>}
             </article>
           ))}
-        </section>
-        {trade?.ok && <article className="card sign"><strong>{action} {trade.symbol}</strong><p>{trade.simOk ? "Route tested. Sign to send the real trade." : trade.simError || "Route ready. Sign in your wallet."}</p><button className="primary" onClick={sign}>Sign {action}</button>{hash && <p><a href={hash.startsWith("0x") && hash.length === 66 ? `https://bscscan.com/tx/${hash}` : "#"}>{hash.slice(0, 18)}...</a></p>}</article>}
+        </div>
+        {trade?.ok && <article className="card"><strong>{action} {trade.symbol}</strong><p>{trade.simOk ? "Route tested. Sign to send the real trade." : trade.simError || "Route ready. Sign in your wallet."}</p><button className="primary" onClick={sign}>Sign {action}</button>{hash && <p>{hash.slice(0, 18)}...</p>}</article>}
         <footer>BNB Hack: Tokenized Stocks Edition. Spot only on BSC. <a href="https://github.com/Benito3262/parity-fair">GitHub</a></footer>
       </main>
       {sheet && (
@@ -134,7 +152,6 @@ export default function Page() {
           </article>
         </div>
       )}
-      <img className="peeker" src="/mascot.png" alt="Parity mascot peeking from the side" />
     </>
   );
 }
