@@ -86,7 +86,7 @@ export default function Page() {
   return (
     <>
       <header>
-        <a className="brand" href="/"><img src="/logo.jpg" alt="Parity" /></a>
+        <a className="brand" href="/"><img className="logo" src="/logo.jpg" alt="Parity" /></a>
         <button className="connect" onClick={() => setSheet(true)}>{wallet ? wallet.slice(0, 6) + "..." + wallet.slice(-4) : "Connect"}</button>
       </header>
       <main>
