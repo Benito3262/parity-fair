@@ -35,3 +35,6 @@ a { color: var(--yellow); }
 @media (min-width: 800px) {
   .grid { grid-template-columns: 1fr 1fr; }
 }
+
+.peeker { position: fixed; right: -46px; top: 42vh; width: 132px; z-index: 4; pointer-events: none; animation: peek 2.8s ease-in-out infinite; }
+@keyframes peek { 50
